@@ -16,11 +16,11 @@ class aes(UnpackPlugin.DecryptPlugin):
         root = os.path.dirname(sys.argv[0])
         self.ui = PyQt5.uic.loadUi(os.path.join(root, 'plugins', 'unpack', 'aes.ui'))
 
-        self.ui.op.activated[QtCore.QString].connect(self._itemchanged)
-        self.ui.op_iv.activated[QtCore.QString].connect(self._itemchanged_iv)
+        self.ui.op.activated[str].connect(self._itemchanged)
+        self.ui.op_iv.activated[str].connect(self._itemchanged_iv)
 
-        self.ui.key.textChanged[QtCore.QString].connect(self._textchanged_key)
-        self.ui.iv.textChanged[QtCore.QString].connect(self._textchanged_iv)
+        self.ui.key.textChanged[str].connect(self._textchanged_key)
+        self.ui.iv.textChanged[str].connect(self._textchanged_iv)
         return True
 
     def _textchanged_key(self, text):
@@ -48,42 +48,27 @@ class aes(UnpackPlugin.DecryptPlugin):
 
     def _itemchanged(self, text):
         self.ui.label_key.setStyleSheet("QLabel {color : red; }")
-    	text = str(text)
+        text = str(text)
 
-    	if text == 'Hex':
-    		# hex validator
-    		self.ui.key.setText('')
-    		self.ui.key.setValidator(UnpackPlugin.MyValidator(self.ui.key))
-    	else:
-    		# no validator for string
-    		self.ui.key.setText('')
-    		self.ui.key.setValidator(None)
+        if text == 'Hex':
+            # hex validator
+    	    self.ui.key.setText('')
+    	    self.ui.key.setValidator(UnpackPlugin.MyValidator(self.ui.key))
+        else:
+    	    # no validator for string
+    	    self.ui.key.setText('')
+    	    self.ui.key.setValidator(None)
 
     def _getvalue(self, op, key):
 
         if key == '':
-            return key
+            return bytes(key)
 
         if op == 'Hex':
             key = UnpackPlugin._convert(key)
-
-            keysize = (key.bit_length() + (8 - key.bit_length()%8)%8)/8
-            i = 0
-
-            out = ''
-            if keysize == 0:
-                out += '\x00'
-
-            # ugly, but it's ok, string is small
-            while i < keysize:
-                out += chr(key & 0xFF)
-                key = key >> 8
-                i += 1
-
-            key = out
-
+            key = key.to_bytes((key.bit_length() + 7) // 8, byteorder='little')
         else:
-            key = key
+            key = bytes(key, 'utf-8')
 
         return key
 
@@ -106,11 +91,13 @@ class aes(UnpackPlugin.DecryptPlugin):
             u, v = self.viewMode.selector.getCurrentSelection()
 
             #aes = pyaes.AESModeOfOperationCFB(key, iv = iv, segment_size = 1)
-            aes = pyaes.AESModeOfOperationCBC(key, iv = iv)
+
+            # we support only CBC now
+            aes = pyaes.AESModeOfOperationCBC(key, iv)
             plaintext =  self.dataModel.getStream(u, v)
 
             # damn!
-            blocks = len(plaintext)/16
+            blocks = len(plaintext)//16
             k = 0
             for i in range(blocks):
                 block = [chr(c) for c in plaintext[k:k+16]]
@@ -125,12 +112,4 @@ class aes(UnpackPlugin.DecryptPlugin):
                 #0123456789abcdef
                 #00 11 22 33 44 55 66 77 bb 99 aa bb cc dd ee ff
 
-            """
-            plaintext = plaintext[0:16]
-            
-            plaintext = [chr(c) for c in plaintext]
-
-            ciphertext = aes.encrypt(plaintext)
-            self.dataModel.setData_s(u, v, ciphertext)
-            """
         return True
